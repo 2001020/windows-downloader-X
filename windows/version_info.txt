@@ -1,0 +1,28 @@
+# PyInstaller version resource template; build.ps1 fills in the version.
+VSVersionInfo(
+  ffi=FixedFileInfo(
+    filevers=(@VERSION_TUPLE@),
+    prodvers=(@VERSION_TUPLE@),
+    mask=0x3f,
+    flags=0x0,
+    OS=0x40004,
+    fileType=0x1,
+    subtype=0x0,
+    date=(0, 0)
+  ),
+  kids=[
+    StringFileInfo([
+      StringTable('040904B0', [
+        StringStruct('CompanyName', 'WinISO Downloader'),
+        StringStruct('FileDescription', 'WinISO Downloader - Windows ISO downloader'),
+        StringStruct('FileVersion', '@VERSION@'),
+        StringStruct('InternalName', 'WinISO-Downloader'),
+        StringStruct('LegalCopyright', 'aria2 is GPL-2.0-or-later. Windows is a trademark of Microsoft.'),
+        StringStruct('OriginalFilename', 'WinISO-Downloader.exe'),
+        StringStruct('ProductName', 'WinISO Downloader'),
+        StringStruct('ProductVersion', '@VERSION@')
+      ])
+    ]),
+    VarFileInfo([VarStruct('Translation', [1033, 1200])])
+  ]
+)
