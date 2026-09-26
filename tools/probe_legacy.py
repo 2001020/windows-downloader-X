@@ -11,8 +11,8 @@ from winiso.msdl import MsdlClient, MsdlError, Product  # noqa: E402
 from winiso.net import USER_AGENT, make_ssl_context  # noqa: E402
 
 REF = Product("ref", "windows10ISO", "ref", ("x64",))
-EDITIONS = [52, 48, 55, 8, 4, 6, 28, 96, 91]
-WANT = ("English", "Chinese (Simplified)", "Chinese Simplified")
+EDITIONS = [52, 61, 62, 68, 71, 2, 6, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28]
+WANT = ("English", "Chinese (Simplified)", "Korean")
 
 
 def head(url):
@@ -34,17 +34,19 @@ for ed in EDITIONS:
         print("edition %s: skus failed %s" % (ed, e))
         continue
     print("edition %s: %s, %d languages" % (ed, skus[0].product_name, len(skus)))
+    tried = 0
     for sku in skus:
-        if sku.language not in WANT:
+        if sku.language not in WANT or (ed != 52 and tried):
             continue
+        tried += 1
+        time.sleep(15)
+        client.new_session(REF.page_url)
         try:
             links = client.links(REF, sku.id)
         except Exception as e:
             print("  %s %s: links failed: %s" % (sku.id, sku.language, e))
-            time.sleep(2)
             continue
         for l in links:
             print("  %s %s: %s %s" % (sku.id, sku.language, l.arch, l.filename))
             print("      host=%s" % l.url.split("/")[2])
             print("      %s" % head(l.url))
-        time.sleep(2)
