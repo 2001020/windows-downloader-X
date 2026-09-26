@@ -78,9 +78,14 @@ def main():
             time.sleep(1)
             st = aria2.status(gid)
             peak = max(peak, int(st.get("downloadSpeed") or 0))
+            print("  %5.1f MB/s  %7.1f MB  %s connections" % (
+                int(st.get("downloadSpeed") or 0) / 1e6, int(st.get("completedLength") or 0) / 1e6,
+                st.get("connections")))
             if st.get("status") in ("error", "complete"):
                 break
+        t = time.time()
         aria2.remove(gid)
+        print("forceRemove answered in %.1fs" % (time.time() - t))
         aria2.stop()
     done = int(st.get("completedLength") or 0)
     total = int(st.get("totalLength") or 0)

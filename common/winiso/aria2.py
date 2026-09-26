@@ -120,19 +120,21 @@ class Aria2:
     def running(self):
         return self.proc is not None and self.proc.poll() is None
 
-    def call(self, method, *params):
+    def call(self, method, *params, timeout=10):
         body = json.dumps({"jsonrpc": "2.0", "id": "winiso", "method": method,
                            "params": ["token:" + self.secret] + list(params)}).encode()
         req = urllib.request.Request("http://127.0.0.1:%d/jsonrpc" % self.port, data=body,
                                      headers={"Content-Type": "application/json"})
         try:
-            with self._opener.open(req, timeout=10) as resp:
+            with self._opener.open(req, timeout=timeout) as resp:
                 reply = json.loads(resp.read().decode())
         except urllib.error.HTTPError as e:
             try:
                 reply = json.loads(e.read().decode())
             except Exception:
                 raise Aria2Error("aria2 RPC HTTP %d" % e.code) from e
+        except (OSError, ValueError) as e:  # URLError, timeouts, bad JSON
+            raise Aria2Error("aria2 RPC %s failed: %s" % (method, e)) from e
         if "error" in reply:
             raise Aria2Error(reply["error"].get("message", str(reply["error"])))
         return reply.get("result")
@@ -174,11 +176,12 @@ class Aria2:
 
     def remove(self, gid):
         try:
-            self.call("aria2.forceRemove", gid)
+            # A busy download loop can take a while to answer.
+            self.call("aria2.forceRemove", gid, timeout=30)
         except Aria2Error:
             pass
         try:
-            self.call("aria2.removeDownloadResult", gid)
+            self.call("aria2.removeDownloadResult", gid, timeout=30)
         except Aria2Error:
             pass
 

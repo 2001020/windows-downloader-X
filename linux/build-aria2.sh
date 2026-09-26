@@ -34,6 +34,12 @@ echo "$ARIA2_SHA256  aria2.tar.xz" | sha256sum -c -
 tar xf aria2.tar.xz
 cd "aria2-$ARIA2_VERSION"
 
+# aria2 aborts at startup when OpenSSL 3's "legacy" provider cannot be loaded.
+# That provider is a separate plugin file a static binary cannot load, and it
+# only supplies RC4 for BitTorrent encryption, which this build leaves out.
+sed -i 's/throw DL_ABORT_EX("OSSL_PROVIDER_load .legacy. failed.");/;/' src/Platform.cc
+grep -q "OSSL_PROVIDER_load 'legacy' failed" src/Platform.cc && { echo "Platform.cc patch failed" >&2; exit 1; }
+
 # HTTP(S) only: the features we do not use (BitTorrent, Metalink, SFTP, cookie
 # databases) are left out to keep the binary small and dependency free.
 ./configure --prefix=/usr --disable-nls --disable-bittorrent --disable-metalink \
