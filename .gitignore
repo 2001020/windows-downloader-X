@@ -1,0 +1,10 @@
+# Build output of the platform build scripts
+windows/build/
+windows/dist/
+macos/build/
+macos/dist/
+linux/build/
+linux/dist/
+__pycache__/
+*.pyc
+*.spec

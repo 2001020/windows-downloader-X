@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=WinISO Downloader
+Name[zh_CN]=Windows ISO 下载器
+GenericName=Windows ISO Downloader
+GenericName[zh_CN]=Windows 镜像下载器
+Comment=Download official Windows ISO images from Microsoft with aria2
+Comment[zh_CN]=使用 aria2 从微软官方服务器下载 Windows ISO 镜像
+Exec=winiso-downloader
+Icon=winiso-downloader
+Terminal=false
+Categories=Network;FileTransfer;Utility;
+StartupWMClass=winiso-downloader

@@ -1,0 +1,177 @@
+name: Build
+
+on:
+  push:
+    branches: ["**"]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: Windows x64
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+          architecture: x64
+      - name: Build
+        shell: pwsh
+        run: ./windows/build.ps1
+      - name: Self-test
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP "selftest.txt"
+          $p = Start-Process -FilePath windows\dist\WinISO-Downloader.exe -ArgumentList "--selftest", "`"$out`"", "--network" -Wait -PassThru
+          Get-Content $out
+          if ($p.ExitCode -ne 0) { throw "self-test failed" }
+      - name: GUI starts
+        shell: pwsh
+        run: |
+          $p = Start-Process -FilePath windows\dist\WinISO-Downloader.exe -PassThru
+          $title = ""
+          for ($i = 0; $i -lt 30 -and -not $title; $i++) {
+            Start-Sleep -Seconds 1
+            if ($p.HasExited) { throw "GUI exited with code $($p.ExitCode)" }
+            # The onefile bootloader starts the real app as a child process.
+            $title = (Get-Process | Where-Object { $_.MainWindowTitle -like "*ISO*" } | Select-Object -First 1).MainWindowTitle
+          }
+          if (-not $title) { throw "no window appeared" }
+          Write-Host "Window: $title"
+          Get-Process WinISO-Downloader -ErrorAction SilentlyContinue | Stop-Process -Force
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WinISO-Downloader-windows-x64
+          path: windows/dist/WinISO-Downloader.exe
+          if-no-files-found: error
+
+  macos:
+    name: macOS universal
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install python.org Python (universal2, bundles Tk)
+        run: |
+          curl -fsSLO https://www.python.org/ftp/python/3.12.10/python-3.12.10-macos11.pkg
+          sudo installer -pkg python-3.12.10-macos11.pkg -target /
+          echo "PYTHON=/Library/Frameworks/Python.framework/Versions/3.12/bin/python3.12" >> "$GITHUB_ENV"
+      - name: Build
+        run: bash macos/build.sh
+      - name: Self-test (arm64 and x86_64 slices)
+        run: |
+          exe="macos/build/pyinstaller/WinISO Downloader.app/Contents/MacOS/WinISO Downloader"
+          lipo -info "$exe"
+          "$exe" --selftest "$RUNNER_TEMP/arm64.txt" --network; cat "$RUNNER_TEMP/arm64.txt"
+          if /usr/bin/pgrep -q oahd || arch -x86_64 /usr/bin/true 2>/dev/null; then
+            arch -x86_64 "$exe" --selftest "$RUNNER_TEMP/x86_64.txt"; cat "$RUNNER_TEMP/x86_64.txt"
+          else
+            echo "::warning::Rosetta not available, x86_64 slice not tested"
+          fi
+      - name: GUI starts
+        run: |
+          open "macos/build/pyinstaller/WinISO Downloader.app"
+          sleep 15
+          pgrep -fl "WinISO Downloader" || { echo "GUI is not running"; exit 1; }
+          pkill -f "WinISO Downloader" || true
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WinISO-Downloader-macos-universal
+          path: |
+            macos/dist/WinISO-Downloader-macOS.dmg
+            macos/dist/WinISO-Downloader-macOS.zip
+          if-no-files-found: error
+
+  linux:
+    name: Linux ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-22.04
+          - arch: aarch64
+            runner: ubuntu-22.04-arm
+    # Oldest available runner: the app needs glibc >= 2.35 (Ubuntu 22.04, Debian 12, Fedora 36).
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Install Tk and test tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends tk8.6 libtk8.6 xvfb x11-utils file
+      - name: Build
+        run: bash linux/build.sh
+      - name: Self-test
+        run: |
+          app=linux/dist/WinISO-Downloader-${{ matrix.arch }}.AppImage
+          file "$app"
+          APPIMAGE_EXTRACT_AND_RUN=1 "$app" --selftest "$RUNNER_TEMP/selftest.txt" --network
+      - name: GUI starts
+        run: |
+          app=linux/dist/WinISO-Downloader-${{ matrix.arch }}.AppImage
+          export APPIMAGE_EXTRACT_AND_RUN=1
+          xvfb-run -a -s "-screen 0 1280x800x24" bash -c "
+            '$app' & pid=\$!
+            for i in \$(seq 30); do
+              sleep 1
+              kill -0 \$pid || { echo 'GUI exited'; exit 1; }
+              xwininfo -root -tree | grep -q 'ISO' && break
+            done
+            xwininfo -root -tree | grep 'ISO' || { echo 'no window'; exit 1; }
+            kill \$pid"
+      - name: Runs on other distributions
+        run: |
+          app=WinISO-Downloader-${{ matrix.arch }}.AppImage
+          run() {
+            echo "::group::$1"
+            docker run --rm -v "$PWD/linux/dist:/dist" -e APPIMAGE_EXTRACT_AND_RUN=1 "$1" sh -c "$2 && /dist/$app --selftest /tmp/st.txt --network"
+            echo "::endgroup::"
+          }
+          run debian:12 "apt-get update -qq && apt-get install -y -qq libx11-6 libfontconfig1 ca-certificates >/dev/null"
+          run fedora:latest "dnf install -y -q libX11 fontconfig >/dev/null"
+          run archlinux:latest "pacman -Sy --noconfirm --quiet libx11 fontconfig >/dev/null" || [ "${{ matrix.arch }}" = aarch64 ]
+      - uses: actions/upload-artifact@v4
+        with:
+          name: WinISO-Downloader-linux-${{ matrix.arch }}
+          path: |
+            linux/dist/WinISO-Downloader-${{ matrix.arch }}.AppImage
+            linux/dist/WinISO-Downloader-linux-${{ matrix.arch }}.tar.gz
+          if-no-files-found: error
+
+  microsoft-api:
+    name: Microsoft download service (live)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - run: sudo apt-get update && sudo apt-get install -y aria2
+      - run: pip install certifi
+      - run: python tools/smoke_test.py --download-seconds 20
+
+  release:
+    name: Publish release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows, macos, linux, microsoft-api]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - run: ls -la artifacts
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          generate_release_notes: true
