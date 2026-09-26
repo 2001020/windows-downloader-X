@@ -5,7 +5,8 @@
 1. reads every product page (editions + SHA-256 table),
 2. lists the languages of each edition,
 3. asks for a real download link (Windows 11 x64, English International),
-4. downloads from Microsoft's CDN with aria2 for a few seconds and reports speed.
+4. downloads from Microsoft's CDN with aria2 for a few seconds and reports speed,
+5. checks that the retired Windows 8.1 / 7 images are still served by the CDN.
 
 Microsoft sometimes rejects requests from data-centre IPs (CI runners); that
 is reported as a warning, not a failure, because it says nothing about the
@@ -17,11 +18,47 @@ import os
 import sys
 import tempfile
 import time
+import urllib.request
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "common"))
 
 from winiso.aria2 import Aria2  # noqa: E402
 from winiso.msdl import PRODUCTS, BlockedError, MsdlClient, find_hash  # noqa: E402
+from winiso.net import USER_AGENT, make_ssl_context  # noqa: E402
+
+CURRENT = [p for p in PRODUCTS if not p.retired]
+RETIRED = [p for p in PRODUCTS if p.retired]
+
+
+def check_cdn(url):
+    """Fetch the first KiB of an image; returns the total size."""
+    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Range": "bytes=0-1023"})
+    opener = urllib.request.build_opener(urllib.request.HTTPSHandler(context=make_ssl_context()))
+    with opener.open(req, timeout=30) as r:
+        assert r.status == 206, "HTTP %s" % r.status
+        return int(r.headers["Content-Range"].rsplit("/", 1)[1])
+
+
+def check_retired(client):
+    """Windows 8.1 and 7: Microsoft retired the pages but still serves the images."""
+    for product in RETIRED:
+        edition = product.editions[0]
+        skus = client.skus(product, edition.id)
+        print("%-24s %s: %d languages" % (product.title, skus[0].product_name, len(skus)))
+        sku = next(s for s in skus if s.language == "English")
+        time.sleep(20)  # Microsoft rejects bursts of link requests
+        client.new_session(product.referer)
+        try:
+            links = client.links(product, sku.id)
+        except BlockedError as e:
+            print("::warning::Microsoft rejected the %s link request from this runner (%s)" % (product.title, e))
+            continue
+        for link in links:
+            size = check_cdn(link.url)
+            print("    %s %s %.2f GB on %s" % (link.arch, link.filename, size / 1e9, link.url.split("/")[2]))
+            assert link.url.startswith("https://software.download.prss.microsoft.com/"), link.url
+            assert size > 2_000_000_000, "unexpected ISO size"
+        assert {l.arch for l in links} >= set(product.archs), "missing architectures"
 
 
 def main():
@@ -31,7 +68,7 @@ def main():
 
     client = MsdlClient(log=lambda m: print("  log:", m))
     infos = {}
-    for product in PRODUCTS:
+    for product in CURRENT:
         info = client.product_info(product)
         infos[product.key] = info
         print("%-24s editions=%s hashes=%d fallback=%s" % (
@@ -40,7 +77,7 @@ def main():
         assert not info.from_fallback, "product page of %s could not be parsed" % product.title
         assert info.hashes, "no SHA-256 table on %s" % product.page_url
 
-    for product in PRODUCTS:
+    for product in CURRENT:
         skus = client.skus(product, infos[product.key].editions[0].id)
         print("%-24s %s: %d languages" % (product.title, skus[0].product_name, len(skus)))
         for arch in product.archs:
@@ -55,6 +92,7 @@ def main():
         links = client.links(product, sku.id)
     except BlockedError as e:
         print("::warning::Microsoft rejected the link request from this runner (%s)" % e)
+        check_retired(client)
         return 0
     for link in links:
         print("link: %s %s (expires %s)" % (link.arch, link.filename, link.expires))
@@ -65,6 +103,7 @@ def main():
     assert expected, "no hash for English International x64"
 
     if args.download_seconds <= 0:
+        check_retired(client)
         return 0
     aria2 = Aria2()
     aria2.start()
@@ -96,6 +135,7 @@ def main():
         return 1
     assert total > 3_000_000_000, "unexpected ISO size"
     assert done > 0, "nothing downloaded"
+    check_retired(client)
     return 0
 
 

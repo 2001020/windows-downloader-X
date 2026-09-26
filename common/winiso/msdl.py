@@ -28,33 +28,61 @@ INSTANCE_ID = "560dc9f3-1aa5-4a2f-b63c-9e18f8d0e175"
 
 
 @dataclass
-class Product:
-    key: str
-    page: str  # path below /software-download/
-    title: str
-    archs: tuple
-    # Used when the product page cannot be parsed (edition id, name).
-    fallback_editions: tuple = ()
-
-    @property
-    def page_url(self):
-        return "%s/en-us/software-download/%s" % (SITE, self.page)
-
-
-PRODUCTS = (
-    Product("win11", "windows11", "Windows 11 (x64)", ("x64",),
-            (("3321", "Windows 11 (multi-edition ISO for x64 devices)"),)),
-    Product("win11arm", "windows11arm64", "Windows 11 (Arm64)", ("arm64",),
-            (("3324", "Windows 11 (multi-edition ISO for Arm64)"),)),
-    Product("win10", "windows10ISO", "Windows 10 (x64 / x86)", ("x64", "x86"),
-            (("2618", "Windows 10 (multi-edition ISO)"),)),
-)
-
-
-@dataclass
 class Edition:
     id: str
     name: str
+    name_zh: str = ""
+
+
+@dataclass
+class Product:
+    key: str
+    page: str  # path below /software-download/, "" when Microsoft retired the page
+    title: str
+    archs: tuple
+    # Built-in edition list: used when the product page cannot be parsed, and
+    # as the only list for retired products (Windows 7 / 8.1), whose pages are
+    # gone although Microsoft's CDN still serves the images.
+    editions: tuple = ()
+    family: str = ""  # UI grouping (Windows 11 x64 and Arm64 share one tile)
+
+    @property
+    def page_url(self):
+        return "%s/en-us/software-download/%s" % (SITE, self.page) if self.page else ""
+
+    @property
+    def referer(self):
+        return self.page_url or "%s/en-us/software-download/windows10ISO" % SITE
+
+    @property
+    def retired(self):
+        return not self.page
+
+
+PRODUCTS = (
+    Product("win11", "windows11", "Windows 11", ("x64",),
+            (Edition("3321", "Windows 11 (multi-edition ISO for x64 devices)", "Windows 11（多版本 ISO，x64 设备）"),),
+            "win11"),
+    Product("win11arm", "windows11arm64", "Windows 11 Arm64", ("arm64",),
+            (Edition("3324", "Windows 11 (multi-edition ISO for Arm64)", "Windows 11（多版本 ISO，Arm64 设备）"),),
+            "win11"),
+    Product("win10", "windows10ISO", "Windows 10", ("x64", "x86"),
+            (Edition("2618", "Windows 10 (multi-edition ISO)", "Windows 10（多版本 ISO）"),), "win10"),
+    Product("win81", "", "Windows 8.1", ("x64", "x86"), (
+        Edition("52", "Windows 8.1 (Core / Pro)", "Windows 8.1（核心版 / 专业版）"),
+        Edition("55", "Windows 8.1 N (Core / Pro)", "Windows 8.1 N（欧洲版，不含媒体组件）"),
+        Edition("61", "Windows 8.1 K", "Windows 8.1 K（韩国版）"),
+        Edition("62", "Windows 8.1 KN", "Windows 8.1 KN（韩国版，不含媒体组件）"),
+    ), "win81"),
+    # Only editions whose images were confirmed on Microsoft's CDN are listed.
+    Product("win7", "", "Windows 7 SP1", ("x64", "x86"), (
+        Edition("8", "Windows 7 Ultimate SP1", "Windows 7 旗舰版 SP1"),
+        Edition("4", "Windows 7 Professional SP1", "Windows 7 专业版 SP1"),
+        Edition("28", "Windows 7 Starter SP1 (32-bit only)", "Windows 7 简易版 SP1（仅 32 位）"),
+        Edition("14", "Windows 7 Ultimate N SP1", "Windows 7 旗舰版 N SP1（欧洲版，不含媒体组件）"),
+        Edition("10", "Windows 7 Home Premium N SP1", "Windows 7 家庭高级版 N SP1（欧洲版，不含媒体组件）"),
+    ), "win7"),
+)
 
 
 @dataclass
@@ -86,6 +114,10 @@ class MsdlError(Exception):
 
 class BlockedError(MsdlError):
     """Microsoft's anti-abuse service ("Sentinel") refused the request."""
+
+
+class NoLinksError(MsdlError):
+    """Microsoft has no image for this edition / language combination."""
 
 
 def normalise(text):
@@ -161,16 +193,21 @@ class MsdlClient:
 
     # -- product page -------------------------------------------------------
     def product_info(self, product):
+        if product.retired:
+            return ProductInfo(list(product.editions), {})
         try:
             page = self.http.get_text(product.page_url)
             editions = parse_editions(page)
             hashes = parse_hashes(page)
+            known = {e.id: e.name_zh for e in product.editions}
+            for e in editions:
+                e.name_zh = known.get(e.id, "")
             if editions:
                 return ProductInfo(editions, hashes)
             self.log("No editions found on %s, using built-in list" % product.page_url)
         except HttpError as e:
             self.log("Could not read %s (%s), using built-in list" % (product.page_url, e))
-        return ProductInfo([Edition(i, n) for i, n in product.fallback_editions], {}, True)
+        return ProductInfo(list(product.editions), {}, True)
 
     # -- session ------------------------------------------------------------
     def new_session(self, referer):
@@ -202,11 +239,11 @@ class MsdlClient:
     # -- API ----------------------------------------------------------------
     def skus(self, product, edition_id):
         if not self.session_id:
-            self.new_session(product.page_url)
+            self.new_session(product.referer)
         url = ("%s/getskuinformationbyproductedition?profile=%s&ProductEditionId=%s"
                "&SKU=undefined&friendlyFileName=undefined&Locale=en-US&sessionID=%s"
                % (API, PROFILE_ID, edition_id, self.session_id))
-        payload = self.http.get_json(url, product.page_url)
+        payload = self.http.get_json(url, product.referer)
         _raise_for_errors(payload)
         result = []
         for s in payload.get("Skus") or []:
@@ -219,11 +256,11 @@ class MsdlClient:
 
     def links(self, product, sku_id, retry=True):
         if not self.session_id:
-            self.new_session(product.page_url)
+            self.new_session(product.referer)
         url = ("%s/GetProductDownloadLinksBySku?profile=%s&productEditionId=undefined"
                "&SKU=%s&friendlyFileName=undefined&Locale=en-US&sessionID=%s"
                % (API, PROFILE_ID, sku_id, self.session_id))
-        payload = self.http.get_json(url, product.page_url)
+        payload = self.http.get_json(url, product.referer)
         try:
             _raise_for_errors(payload)
         except BlockedError:
@@ -231,7 +268,7 @@ class MsdlClient:
                 raise
             # A fresh, freshly registered session sometimes succeeds.
             self.log("Request rejected by Microsoft, retrying with a new session")
-            self.new_session(product.page_url)
+            self.new_session(product.referer)
             return self.links(product, sku_id, retry=False)
         result = []
         for opt in payload.get("ProductDownloadOptions") or []:
@@ -242,7 +279,7 @@ class MsdlClient:
             result.append(DownloadLink(uri, arch_from_link(opt.get("DownloadType"), uri), filename,
                                        payload.get("DownloadExpirationDatetime") or ""))
         if not result:
-            raise MsdlError("Microsoft returned no download links")
+            raise NoLinksError("Microsoft returned no download links")
         return result
 
 

@@ -33,6 +33,7 @@ rm -rf "$BUILD/pyinstaller" "$BUILD/work" "$APPDIR"
     --paths "$ROOT/common" \
     --add-binary "$BUILD/aria2/aria2c:aria2" \
     --add-data "$ROOT/common/winiso/assets:assets" \
+    --collect-data sv_ttk \
     --distpath "$BUILD/pyinstaller" --workpath "$BUILD/work" --specpath "$BUILD" \
     "$HERE/main.py"
 

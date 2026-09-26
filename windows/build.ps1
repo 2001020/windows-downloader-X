@@ -64,6 +64,7 @@ Invoke-Checked $Python @(
     "--paths", (Join-Path $Root "common"),
     "--add-binary", "$Aria2Exe;aria2",
     "--add-data", "$(Join-Path $Root 'common\winiso\assets');assets",
+    "--collect-data", "sv_ttk",
     "--distpath", $Dist,
     "--workpath", (Join-Path $Build "work"),
     "--specpath", $Build,

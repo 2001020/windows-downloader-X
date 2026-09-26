@@ -1,4 +1,4 @@
-# Linux 版 · WinISO Downloader
+# Linux 版
 
 ## 运行
 

@@ -63,6 +63,8 @@ def main():
     assets = os.path.join(ROOT, "common", "winiso", "assets")
     os.makedirs(assets, exist_ok=True)
     icon.resize((256, 256), Image.LANCZOS).save(os.path.join(assets, "icon.png"))
+    icon.resize((48, 48), Image.LANCZOS).save(os.path.join(assets, "icon-48.png"))
+    icon.resize((96, 96), Image.LANCZOS).save(os.path.join(assets, "icon-96.png"))
     icon.resize((256, 256), Image.LANCZOS).save(os.path.join(ROOT, "linux", "winiso-downloader.png"))
     icon.save(os.path.join(ROOT, "windows", "icon.ico"),
               sizes=[(16, 16), (24, 24), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])

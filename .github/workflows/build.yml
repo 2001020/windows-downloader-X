@@ -156,6 +156,7 @@ jobs:
           python-version: "3.12"
       - run: sudo apt-get update && sudo apt-get install -y aria2
       - run: pip install certifi
+      - run: python tools/check_ui_text.py
       - run: python tools/smoke_test.py --download-seconds 20
 
   release:

@@ -51,6 +51,29 @@ def selftest(out_path=None, network=False):
     check("tcl", tcl)
     check("gui module", lambda: importlib.import_module(".gui", __package__).__name__)
 
+    def theme():
+        import sv_ttk
+
+        path = sv_ttk.TCL_THEME_FILE_PATH
+        if not path.is_file():
+            _fail("%s missing" % path)
+        return "sv_ttk %s" % path.parent.name
+
+    check("theme", theme)
+
+    def ui_text():
+        from .i18n import FORBIDDEN_CHARS, LANGUAGE_ZH, STRINGS
+        from .msdl import PRODUCTS
+
+        texts = [v for entry in STRINGS.values() for v in entry.values()] + list(LANGUAGE_ZH.values())
+        texts += [n for p in PRODUCTS for e in p.editions for n in (e.name, e.name_zh)] + [p.title for p in PRODUCTS]
+        bad = [t for t in texts if any(ch in t for ch in FORBIDDEN_CHARS)]
+        if bad:
+            _fail("forbidden characters in %r" % bad)
+        return "%d strings clean" % len(texts)
+
+    check("ui text", ui_text)
+
     if network:
         def editions():
             from .msdl import PRODUCTS, MsdlClient
