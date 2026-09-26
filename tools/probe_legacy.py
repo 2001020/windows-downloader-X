@@ -11,7 +11,7 @@ from winiso.msdl import MsdlClient, MsdlError, Product  # noqa: E402
 from winiso.net import USER_AGENT, make_ssl_context  # noqa: E402
 
 REF = Product("ref", "windows10ISO", "ref", ("x64",))
-EDITIONS = [52, 61, 62, 68, 71, 2, 6, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28]
+EDITIONS = [6, 2, 28, 12, 62, 26]
 WANT = ("English", "Chinese (Simplified)", "Korean")
 
 
@@ -39,7 +39,7 @@ for ed in EDITIONS:
         if sku.language not in WANT or (ed != 52 and tried):
             continue
         tried += 1
-        time.sleep(15)
+        time.sleep(45)
         client.new_session(REF.page_url)
         try:
             links = client.links(REF, sku.id)
