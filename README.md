@@ -1,6 +1,7 @@
 # Windows ISO 下载器（Windows Downloader X）
 
 一个带图形界面的 Windows 官方 ISO 镜像下载器，提供对 Windows、macOS、Linux 三个平台的支持。
+与Claude AI协作。
 
 - **官方来源**：直接调用 Microsoft 官网下载页（microsoft.com/software-download）背后的同一套接口，所有镜像（包括 Windows 7 / 8.1）都来自微软的全球 CDN `software.download.prss.microsoft.com`，全球各地（包括中国大陆）都能直接快速访问，不经过任何第三方网站。
 - **aria2 加速**：内置 [aria2](https://aria2.github.io/)，默认 16 线程分段下载，支持暂停、继续和断点续传。
