@@ -1,8 +1,8 @@
-# Windows ISO 下载器（WinISO Downloader）
+# Windows ISO 下载器（Windows Downloader X）
 
-一个带图形界面的 Windows 官方 ISO 镜像下载器，Windows、macOS、Linux 三个平台都能双击运行。
+一个带图形界面的 Windows 官方 ISO 镜像下载器，提供对 Windows、macOS、Linux 三个平台的支持。
 
-- **官方来源**：直接调用 Microsoft 官网下载页（microsoft.com/software-download）背后的同一套接口，所有镜像（包括 Windows 7 / 8.1）都来自微软自己的全球 CDN `software.download.prss.microsoft.com`，全球各地（包括中国大陆）都能直接快速访问，不经过任何第三方网站。
+- **官方来源**：直接调用 Microsoft 官网下载页（microsoft.com/software-download）背后的同一套接口，所有镜像（包括 Windows 7 / 8.1）都来自微软的全球 CDN `software.download.prss.microsoft.com`，全球各地（包括中国大陆）都能直接快速访问，不经过任何第三方网站。
 - **aria2 加速**：内置 [aria2](https://aria2.github.io/)，默认 16 线程分段下载，支持暂停、继续和断点续传。
 - **自动校验**：下载完成后，用微软官网公布的 SHA-256 自动校验文件完整性。
 - **中英双语**：界面语言自动跟随系统，也可以手动切换。
@@ -16,14 +16,14 @@
 
 | 产品 | 架构 | 语言 |
 |---|---|---|
-| Windows 11（最新版，目前为 25H2） | x64 | 38 种 |
-| Windows 11 Arm64（最新版） | Arm64 | 38 种 |
+| Windows 11 最新 | x64 | 38 种 |
+| Windows 11 Arm64 最新 | Arm64 | 38 种 |
 | Windows 10 22H2 | x64 / x86 | 38 种 |
 | Windows 8.1（含 N、K 版） | x64 / x86 | 36 种 |
 | Windows 7 SP1（旗舰版、专业版、简易版、旗舰版 N、家庭高级版 N） | x64 / x86 | 最多 35 种 |
 | 自定义链接 | 任意 | 粘贴任意 ISO 直链，同样用 aria2 下载 |
 
-Windows 10 / 11 的版本列表是运行时从微软官网实时读取的，微软发布新版本后程序无需更新。
+Windows 11 的版本列表是运行时从微软官网实时读取的，微软发布新版本后程序无需更新。
 
 关于旧系统：
 
@@ -32,8 +32,6 @@ Windows 10 / 11 的版本列表是运行时从微软官网实时读取的，微�
 - 并非每个版本都有全部语言，个别组合微软没有镜像时，程序会提示换一个语言或版本。
 
 ## 下载和运行
-
-构建好的程序在 [Releases](../../releases) 页面（推送 `v*` 标签后由 CI 自动发布），也可以在 [Actions](../../actions) 的构建记录里下载 Artifacts。
 
 | 平台 | 文件 | 运行方式 |
 |---|---|---|
